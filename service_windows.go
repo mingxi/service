@@ -159,7 +159,7 @@ func (ws *windowsService) Execute(args []string, r <-chan svc.ChangeRequest, cha
 	const cmdsAccepted = svc.AcceptStop | svc.AcceptShutdown
 	changes <- svc.Status{State: svc.StartPending}
 
-	if err := ws.i.Start(ws); err != nil {
+	if err := ws.i.Start(ws, args...); err != nil {
 		ws.setError(err)
 		return true, 1
 	}
@@ -275,7 +275,7 @@ func (ws *windowsService) Run() error {
 	return ws.i.Stop(ws)
 }
 
-func (ws *windowsService) Start() error {
+func (ws *windowsService) Start(args ...string) error {
 	m, err := mgr.Connect()
 	if err != nil {
 		return err
@@ -287,7 +287,7 @@ func (ws *windowsService) Start() error {
 		return err
 	}
 	defer s.Close()
-	return s.Start()
+	return s.Start(args...)
 }
 
 func (ws *windowsService) Stop() error {
@@ -306,7 +306,7 @@ func (ws *windowsService) Stop() error {
 	return ws.stopWait(s)
 }
 
-func (ws *windowsService) Restart() error {
+func (ws *windowsService) Restart(args ...string) error {
 	m, err := mgr.Connect()
 	if err != nil {
 		return err
@@ -324,7 +324,7 @@ func (ws *windowsService) Restart() error {
 		return err
 	}
 
-	return s.Start()
+	return s.Start(args...)
 }
 
 func (ws *windowsService) stopWait(s *mgr.Service) error {

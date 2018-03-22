@@ -18,19 +18,19 @@
 //	import (
 //		"log"
 //
-//		"github.com/kardianos/service"
+//		"github.com/mingxi/service"
 //	)
 //
 //	var logger service.Logger
 //
 //	type program struct{}
 //
-//	func (p *program) Start(s service.Service) error {
+//	func (p *program) Start(s service.Service, args ...string) error {
 //		// Start should not block. Do the actual work async.
-//		go p.run()
+//		go p.run(args)
 //		return nil
 //	}
-//	func (p *program) run() {
+//	func (p *program) run(args []string) {
 //		// Do work here
 //	}
 //	func (p *program) Stop(s service.Service) error {
@@ -59,7 +59,7 @@
 //			logger.Error(err)
 //		}
 //	}
-package service // import "github.com/kardianos/service"
+package service // import "github.com/mingxi/service"
 
 import (
 	"errors"
@@ -275,8 +275,7 @@ type Interface interface {
 	// Start provides a place to initiate the service. The service doesn't not
 	// signal a completed start until after this function returns, so the
 	// Start function must not take more then a few seconds at most.
-	Start(s Service) error
-
+	Start(s Service, args ...string) error
 	// Stop provides a place to clean up program execution before it is terminated.
 	// It should not take more then a few seconds to execute.
 	// Stop should not call os.Exit directly in the function.
@@ -293,13 +292,13 @@ type Service interface {
 	Run() error
 
 	// Start signals to the OS service manager the given service should start.
-	Start() error
+	Start(args ...string) error
 
 	// Stop signals to the OS service manager the given service should stop.
 	Stop() error
 
 	// Restart signals to the OS service manager the given service should stop then start.
-	Restart() error
+	Restart(args ...string) error
 
 	// Install setups up the given service in the OS service manager. This may require
 	// greater rights. Will return an error if it is already installed.

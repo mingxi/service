@@ -15,7 +15,7 @@ import (
 	"path/filepath"
 
 	"github.com/kardianos/osext"
-	"github.com/kardianos/service"
+	"github.com/mingxi/service"
 )
 
 // Config is the runner app config structure.
@@ -41,7 +41,7 @@ type program struct {
 	cmd *exec.Cmd
 }
 
-func (p *program) Start(s service.Service) error {
+func (p *program) Start(s service.Service, args ...string) error {
 	// Look for exec.
 	// Verify home directory.
 	fullExec, err := exec.LookPath(p.Exec)
@@ -53,10 +53,10 @@ func (p *program) Start(s service.Service) error {
 	p.cmd.Dir = p.Dir
 	p.cmd.Env = append(os.Environ(), p.Env...)
 
-	go p.run()
+	go p.run(args)
 	return nil
 }
-func (p *program) run() {
+func (p *program) run(args []string) {
 	logger.Info("Starting ", p.DisplayName)
 	defer func() {
 		if service.Interactive() {

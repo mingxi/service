@@ -10,19 +10,19 @@ import (
 	"os"
 	"time"
 
-	"github.com/kardianos/service"
+	"github.com/mingxi/service"
 )
 
 var logger service.Logger
 
 type program struct{}
 
-func (p *program) Start(s service.Service) error {
+func (p *program) Start(s service.Service, args ...string) error {
 	// Start should not block. Do the actual work async.
-	go p.run()
+	go p.run(args)
 	return nil
 }
-func (p *program) run() {
+func (p *program) run(args []string) {
 	// Do work here
 }
 func (p *program) Stop(s service.Service) error {

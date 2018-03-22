@@ -10,7 +10,7 @@ import (
 	"log"
 	"time"
 
-	"github.com/kardianos/service"
+	"github.com/mingxi/service"
 )
 
 var logger service.Logger
@@ -21,7 +21,7 @@ type program struct {
 	exit chan struct{}
 }
 
-func (p *program) Start(s service.Service) error {
+func (p *program) Start(s service.Service, args ...string) error {
 	if service.Interactive() {
 		logger.Info("Running in terminal.")
 	} else {
@@ -30,10 +30,10 @@ func (p *program) Start(s service.Service) error {
 	p.exit = make(chan struct{})
 
 	// Start should not block. Do the actual work async.
-	go p.run()
+	go p.run(args)
 	return nil
 }
-func (p *program) run() error {
+func (p *program) run(args []string) error {
 	logger.Infof("I'm running %v.", service.Platform())
 	ticker := time.NewTicker(2 * time.Second)
 	for {
