@@ -9,10 +9,12 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"io/ioutil"
 	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 
 	"github.com/kardianos/osext"
 	"github.com/mingxi/service"
@@ -44,19 +46,34 @@ type program struct {
 func (p *program) Start(s service.Service, args ...string) error {
 	// Look for exec.
 	// Verify home directory.
+	for i, env := range p.Env {
+		kv := strings.SplitN(env, "=", 2)
+		if len(kv) == 2 {
+			if strings.TrimSpace(strings.ToLower(kv[0])) == "path" {
+				pathEnv := os.ExpandEnv(fmt.Sprintf("%s;$PATH", kv[1]))
+				os.Setenv("PATH", pathEnv)
+			}
+		} else {
+			p.Env[i] = ""
+		}
+	}
 	fullExec, err := exec.LookPath(p.Exec)
 	if err != nil {
 		return fmt.Errorf("Failed to find executable %q: %v", p.Exec, err)
 	}
-
 	p.cmd = exec.Command(fullExec, p.Args...)
-	p.cmd.Dir = p.Dir
+	if p.Dir != "" {
+		fi, err := os.Stat(p.Dir)
+		if err == nil && fi.IsDir() {
+			os.Chdir(p.Dir)
+			p.cmd.Dir = p.Dir
+		}
+	}
 	p.cmd.Env = append(os.Environ(), p.Env...)
-
-	go p.run(args)
+	go p.run()
 	return nil
 }
-func (p *program) run(args []string) {
+func (p *program) run() {
 	logger.Info("Starting ", p.DisplayName)
 	defer func() {
 		if service.Interactive() {
@@ -84,22 +101,19 @@ func (p *program) run(args []string) {
 		defer f.Close()
 		p.cmd.Stdout = f
 	}
-
 	err := p.cmd.Run()
 	if err != nil {
 		logger.Warningf("Error running: %v", err)
 	}
-
 	return
 }
 func (p *program) Stop(s service.Service) error {
 	close(p.exit)
 	logger.Info("Stopping ", p.DisplayName)
-	if p.cmd.ProcessState.Exited() == false {
-		p.cmd.Process.Kill()
-	}
 	if service.Interactive() {
 		os.Exit(0)
+	} else {
+		p.cmd.Process.Kill()
 	}
 	return nil
 }
@@ -123,11 +137,12 @@ func getConfig(path string) (*Config, error) {
 		return nil, err
 	}
 	defer f.Close()
-
 	conf := &Config{}
-
-	r := json.NewDecoder(f)
-	err = r.Decode(&conf)
+	data, err := ioutil.ReadAll(f)
+	if err != nil {
+		return nil, err
+	}
+	json.Unmarshal(data, &conf)
 	if err != nil {
 		return nil, err
 	}
