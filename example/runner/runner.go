@@ -18,6 +18,7 @@ import (
 
 	"github.com/kardianos/osext"
 	"github.com/mingxi/service"
+	"golang.org/x/sys/windows/registry"
 )
 
 // Config is the runner app config structure.
@@ -57,18 +58,22 @@ func (p *program) Start(s service.Service, args ...string) error {
 			p.Env[i] = ""
 		}
 	}
+	if p.Dir != "" {
+		fi, err := os.Stat(p.Dir)
+		if err == nil && fi.IsDir() {
+			os.Chdir(p.Dir)
+		}
+	} else {
+		dir, _, err := getExecPath()
+		if err == nil {
+			os.Chdir(dir)
+		}
+	}
 	fullExec, err := exec.LookPath(p.Exec)
 	if err != nil {
 		return fmt.Errorf("Failed to find executable %q: %v", p.Exec, err)
 	}
 	p.cmd = exec.Command(fullExec, p.Args...)
-	if p.Dir != "" {
-		fi, err := os.Stat(p.Dir)
-		if err == nil && fi.IsDir() {
-			os.Chdir(p.Dir)
-			p.cmd.Dir = p.Dir
-		}
-	}
 	p.cmd.Env = append(os.Environ(), p.Env...)
 	go p.run()
 	return nil
@@ -118,22 +123,48 @@ func (p *program) Stop(s service.Service) error {
 	return nil
 }
 
-func getConfigPath() (string, error) {
+func getExecPath() (string, string, error) {
 	fullexecpath, err := osext.Executable()
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
 
 	dir, execname := filepath.Split(fullexecpath)
+	return dir, execname, nil
+}
+
+func getConfigPath() (string, error) {
+	dir, execname, err := getExecPath()
+	if err != nil {
+		return "", err
+	}
 	ext := filepath.Ext(execname)
 	name := execname[:len(execname)-len(ext)]
-
 	return filepath.Join(dir, name+".json"), nil
 }
 
-func getConfig(path string) (*Config, error) {
-	f, err := os.Open(path)
+func getConfig() (*Config, error) {
+	configPath, err := getConfigPath()
 	if err != nil {
+		return nil, err
+	}
+	f, err := os.Open(configPath)
+	if err != nil {
+		_, execname, err := getExecPath()
+		key, err := registry.OpenKey(registry.CURRENT_USER, fmt.Sprintf("SOFTWARE\\%s", execname), registry.READ)
+		if err == nil {
+			defer key.Close()
+			data, _, err := key.GetBinaryValue("config")
+			if err == nil {
+				conf := &Config{}
+				err := json.Unmarshal(data, &conf)
+				if err != nil {
+					return nil, err
+				}
+				return conf, nil
+			}
+			return nil, err
+		}
 		return nil, err
 	}
 	defer f.Close()
@@ -149,19 +180,47 @@ func getConfig(path string) (*Config, error) {
 	return conf, nil
 }
 
+func initConfig() {
+	config := &Config{Name: "srv", DisplayName: "srv", Description: "Service", Exec: "main.exe"}
+	data, err := json.Marshal(&config)
+	if err == nil {
+		cfp, err := getConfigPath()
+		if err == nil {
+			ioutil.WriteFile(cfp, data, 0755)
+		}
+	}
+}
+
+func createConfig(config *Config) {
+	_, execname, err := getExecPath()
+	if err == nil {
+		key, _, err := registry.CreateKey(registry.CURRENT_USER, fmt.Sprintf("SOFTWARE\\%s", execname), registry.ALL_ACCESS)
+		if err == nil {
+			defer key.Close()
+			data, err := json.Marshal(&config)
+			if err == nil {
+				if err == nil {
+					key.SetBinaryValue("config", data)
+				}
+			}
+		}
+	}
+}
+
 func main() {
 	svcFlag := flag.String("service", "", "Control the system service.")
 	flag.Parse()
-
-	configPath, err := getConfigPath()
+	if len(*svcFlag) != 0 {
+		if *svcFlag == "init" {
+			initConfig()
+			return
+		}
+	}
+	config, err := getConfig()
 	if err != nil {
 		log.Fatal(err)
 	}
-	config, err := getConfig(configPath)
-	if err != nil {
-		log.Fatal(err)
-	}
-
+	createConfig(config)
 	svcConfig := &service.Config{
 		Name:        config.Name,
 		DisplayName: config.DisplayName,
